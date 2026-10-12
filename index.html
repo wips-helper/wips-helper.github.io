@@ -45,7 +45,7 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 .hdr-row{display:flex;align-items:center;justify-content:space-between}
 .hdr-l{display:flex;align-items:center;gap:8px}
 .hdr-ic{width:32px;height:32px;background:rgba(255,255,255,.12);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px}
-.hdr-l{min-width:0}.hdr-l h1{font-size:17px;font-weight:600;white-space:nowrap}
+.hdr-l{min-width:0;cursor:pointer;-webkit-tap-highlight-color:transparent}.hdr-l:active{opacity:.7}.hdr-l h1{font-size:17px;font-weight:600;white-space:nowrap}
 .hdr-sub{font-size:11px;color:rgba(255,255,255,.5);margin-left:40px;margin-top:2px}
 .hdr-r{display:flex;gap:5px;align-items:center;flex-shrink:0}
 .hdr-btn{background:rgba(255,255,255,.1);border:none;border-radius:8px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:14px}
@@ -269,7 +269,7 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 <div class="screen" id="mainScreen">
 <header class="hdr">
   <div class="hdr-row">
-    <div class="hdr-l"><div class="hdr-ic">🏢</div><h1>WIPS 업무 도우미</h1></div>
+    <div class="hdr-l" role="button" tabindex="0" title="처음 화면으로" onclick="goTop()" onkeydown="if(event.key==='Enter')goTop()"><div class="hdr-ic">🏢</div><h1>WIPS 업무 도우미</h1></div>
     <div class="hdr-r">
       <span class="u-pill" id="userPill"></span>
       <span class="dept-pill" id="deptPill"></span>
@@ -606,6 +606,8 @@ function detBack(){
   } else if(curView==='sub2list'){showCat(curCat);}
   else {goHome();}
 }
+// 제목을 누르면 검색·설정 화면을 닫고 맨 위 홈 화면으로
+function goTop(){sugHide();document.getElementById('sInput').blur();goHome();scrollTo({top:0,behavior:'smooth'});}
 function goHome(){curCat=null;curSub=null;curSub2=null;curView='';hideAll();document.getElementById('homeView').style.display='block';document.getElementById('statsBar').style.display='flex';document.getElementById('srchWrap').style.display='block';document.getElementById('sInput').value='';document.getElementById('sClear').classList.remove('show');initCats();scrollTo(0,0);}
 function tgl(id){const c=document.getElementById(id),o=c.classList.contains('open');document.querySelectorAll('.ic.open').forEach(x=>x.classList.remove('open'));if(!o){c.classList.add('open');logView(c);}}
 
