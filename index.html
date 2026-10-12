@@ -434,13 +434,19 @@ async function syncFromServer(){
   if(data.users&&data.users.length){saveUsers(data.users.map(u=>({id:String(u.id||''),name:String(u.name||''),role:String(u.role||'user'),dept:String(u.dept||'general'),created:String(u.created||'').slice(0,10)})));}
   if(data.depts&&data.depts.length){saveDepts(data.depts.map(d=>({id:String(d.id||''),name:String(d.name||''),color:String(d.color||'#9090A0')})));}
   if(data.perms&&data.perms.length){const perms={};data.perms.forEach(p=>{perms[String(p.dept_id||'')]=String(p.categories||'').split(',').map(x=>x.trim()).filter(Boolean);});savePerms(perms);}
-  if(data.issues&&data.issues.length){
-    const prev=RAW_ISSUES;
-    assignIds(data.issues,prev);
-    RAW_ISSUES=data.issues;s('raw_issues',RAW_ISSUES);
-    buildDB(data.issues);
-  }
+  if(!Array.isArray(data.issues)){if(bar)bar.classList.remove('show');return false;}
+  const prev=RAW_ISSUES;
+  assignIds(data.issues,prev);
+  RAW_ISSUES=data.issues;s('raw_issues',RAW_ISSUES);
+  buildDB(data.issues);
   if(bar)bar.classList.remove('show');return true;
+}
+// 가이드를 저장하기 전에 반드시 서버의 최신 목록을 받는다.
+// 받지 못하면 저장하지 않는다 — 기기에 남은 예전·빈 목록으로 전체를 덮어쓰는 사고를 막기 위함.
+async function freshIssues(){
+  for(let i=0;i<2;i++){if(await syncFromServer())return true;}
+  toast('⚠️ 최신 데이터를 받지 못해 저장하지 않았어요. 잠시 후 다시 시도해 주세요');
+  return false;
 }
 
 function buildDB(issues){
@@ -715,14 +721,14 @@ function renderCatOrder(){
   el.innerHTML=html;
 }
 async function setCatGroup(k,g){
-  toast('📡 최신 데이터 확인 중...');await syncFromServer();
+  toast('📡 최신 데이터 확인 중...');if(!await freshIssues()){renderCatOrder();return;}
   RAW_ISSUES.forEach(r=>{if(String(r.category)===String(k))r.cat_group=g;});
   s('raw_issues',RAW_ISSUES);buildDB(RAW_ISSUES);renderCatOrder();
   const res=await apiPost({action:'updateIssues',rows:RAW_ISSUES});
   toast(apiOk(res)?'✅ '+(DB[k]?DB[k].name:'')+' → '+grpOf(g).name+'(으)로 이동':'⚠️ 분류 변경 — 서버 반영 실패, 다시 시도하세요');
 }
 async function moveCat(k,dir){
-  await syncFromServer();
+  if(!await freshIssues())return;
   const keys=Object.keys(DB);
   const i=keys.indexOf(k),j=i+dir;
   if(i<0||j<0||j>=keys.length)return;
@@ -790,7 +796,9 @@ async function confirmDel(){
     toast(apiOk(res)?'🚫 '+(u?u.name:'직원')+'님 삭제':'⚠️ 삭제 — 서버 반영 실패, 다시 시도하세요');
     renderUserList();
   } else if(delType==='issue'&&delTgt){
-    RAW_ISSUES=RAW_ISSUES.filter(r=>String(r.id)!==String(delTgt));s('raw_issues',RAW_ISSUES);buildDB(RAW_ISSUES);closeModal();
+    const tgt=RAW_ISSUES.find(r=>String(r.id)===String(delTgt));closeModal();
+    if(!tgt||!await freshIssues())return;
+    RAW_ISSUES=RAW_ISSUES.filter(r=>!(String(r.category)===String(tgt.category)&&String(r.title)===String(tgt.title)));s('raw_issues',RAW_ISSUES);buildDB(RAW_ISSUES);
     const res=await apiPost({action:'updateIssues',rows:RAW_ISSUES});
     toast(apiOk(res)?'🗑 가이드 삭제':'⚠️ 삭제 — 서버 반영 실패, 다시 시도하세요');
     renderIssueManager();
@@ -1009,7 +1017,7 @@ function missLinkOpen(btn,i){
 async function missLink(btn,i){
   const q=MISSES[i].q,[cat,...rest]=btn.previousElementSibling.value.split('|'),title=rest.join('|');
   btn.disabled=true;btn.textContent='저장 중...';
-  await syncFromServer();
+  if(!await freshIssues()){btn.disabled=false;btn.textContent='추가';return;}
   const row=RAW_ISSUES.find(r=>String(r.category)===cat&&String(r.title)===title);
   if(!row){toast('⚠️ 가이드를 찾지 못했어요. 새로고침 후 다시 시도하세요');btn.disabled=false;btn.textContent='추가';return;}
   const tags=String(row.tags||'').split(',').map(x=>x.trim()).filter(Boolean);
@@ -1034,7 +1042,7 @@ async function renderHistory(){
 async function restoreHist(i){
   const x=HIST[i];if(!x||!x.row||!x.row.title)return;
   if(!confirm(`"${x.title}" 가이드를 ${fmtTime(x.time)} ${x.change} 전 내용으로 되돌릴까요?\n지금 내용은 수정 이력에 남아요.`))return;
-  toast('📡 최신 데이터 확인 중...');await syncFromServer();
+  toast('📡 최신 데이터 확인 중...');if(!await freshIssues())return;
   const row=Object.assign({},x.row);if(!row.id)row.id=genId();
   RAW_ISSUES=RAW_ISSUES.filter(r=>!(String(r.category)===String(row.category)&&String(r.title)===String(row.title)));
   RAW_ISSUES.push(row);s('raw_issues',RAW_ISSUES);buildDB(RAW_ISSUES);
@@ -1231,7 +1239,7 @@ async function saveIssue(){
 
   // 저장 직전 서버 최신본을 먼저 받아, 다른 관리자가 추가한 가이드를 덮어쓰지 않도록 한다.
   toast('📡 최신 데이터 확인 중...');
-  await syncFromServer();
+  if(!await freshIssues())return;
 
   if(issueEditMode){
     RAW_ISSUES=RAW_ISSUES.filter(r=>String(r.id)!==String(issueEditId));
@@ -1247,7 +1255,7 @@ async function saveIssue(){
   toast('📡 서버 저장 중...');
   const res=await apiPost({action:'updateIssues',rows:RAW_ISSUES});
   if(!apiOk(res)){
-    toast('⚠️ 서버 저장 실패 — 인터넷 확인 후 다시 시도하세요');
+    toast('⚠️ '+(res&&res.error?res.error:'서버 저장 실패 — 인터넷 확인 후 다시 시도하세요'));await syncFromServer();
     renderIssueManager();
     return;
   }
