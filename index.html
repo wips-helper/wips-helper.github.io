@@ -148,7 +148,7 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 .ui{flex:1;min-width:0}
 .un{font-size:12px;font-weight:500;display:flex;align-items:center;gap:4px;flex-wrap:wrap}
 .ur{font-size:9px;padding:1px 5px;border-radius:6px;font-weight:500}
-.ura{background:var(--al);color:var(--ac)}.uru{background:var(--bg);color:var(--tm)}
+.ura{background:var(--al);color:var(--ac)}.ure{background:#ECFDF5;color:#059669}.uru{background:var(--bg);color:var(--tm)}
 .ud-tag{font-size:9px;padding:1px 5px;border-radius:6px;font-weight:500;background:var(--sl);color:var(--sc)}
 .uid{font-size:10px;color:var(--tm);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .uact{display:flex;gap:3px}
@@ -312,7 +312,7 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 
   <!-- ADMIN -->
   <div class="ap" id="adminPanel">
-    <div class="det-h"><button class="bk" onclick="hideAdmin()">◀</button><div class="dt"><h2>⚙️ 관리자 설정</h2><span>사용자·가이드 데이터·부서·권한 관리</span></div></div>
+    <div class="det-h"><button class="bk" onclick="hideAdmin()">◀</button><div class="dt"><h2 id="admT">⚙️ 관리자 설정</h2><span id="admS">사용자·가이드 데이터·부서·권한 관리</span></div></div>
     <div class="atabs" id="aTabs">
       <button class="atab active" onclick="aTab('users',this)">직원 관리</button>
       <button class="atab" onclick="aTab('adduser',this)">직원 추가</button>
@@ -376,6 +376,21 @@ function clrSess(){sessionStorage.removeItem('pcg_sess');}
 // 큰 분류 (재무 / 인사 / 지원). 카테고리마다 ISSUES 시트의 cat_group 칸에 id를 저장한다.
 const GROUPS=[{id:'finance',name:'재무',icon:'💰'},{id:'hr',name:'인사',icon:'👥'},{id:'support',name:'지원',icon:'🛠️'}];
 const DEF_GROUP='support';
+// 권한: admin(관리자) / user(일반) / editor:finance 등(파트 담당자 · 자기 파트 가이드만 관리)
+const ROLE_OPTS=[['user','일반 직원'],['editor:finance','재무 담당'],['editor:hr','인사 담당'],['editor:support','지원 담당'],['admin','관리자']];
+function myGroups(){
+  if(!CU)return[];if(CU.role==='admin')return GROUPS.map(g=>g.id);
+  const m=/^editor:(.+)$/.exec(String(CU.role||''));
+  return m?m[1].split(',').map(x=>x.trim()).filter(g=>GROUPS.some(x=>x.id===g)):[];
+}
+function isEditor(){return !!CU&&CU.role!=='admin'&&myGroups().length>0;}
+function canEditCat(k){return !!DB[k]&&myGroups().includes(DB[k].group);}
+function roleLabel(role){
+  if(role==='admin')return '관리자';
+  const m=/^editor:(.+)$/.exec(String(role||''));
+  if(m)return m[1].split(',').map(g=>(GROUPS.find(x=>x.id===g.trim())||{name:g}).name).join('·')+' 담당';
+  return '일반';
+}
 function grpOf(id){return GROUPS.find(g=>g.id===id)||GROUPS.find(g=>g.id===DEF_GROUP);}
 let CU=null,delTgt=null,delType='',DB={},RAW_ISSUES=[];
 let curCat=null,curSub=null,curSub2=null,curView=''; // 현재 카테고리/소분류/소소분류, 현재 화면 단계
@@ -469,11 +484,11 @@ function showMain(){
   document.getElementById('loginScreen').classList.remove('active');document.getElementById('mainScreen').classList.add('active');
   document.getElementById('userPill').textContent=CU.name;
   const dept=getDepts().find(d=>d.id===CU.dept);document.getElementById('deptPill').textContent=dept?dept.name:'';
-  document.getElementById('adminBtn').style.display=CU.role==='admin'?'flex':'none';goHome();
+  document.getElementById('adminBtn').style.display=(CU.role==='admin'||isEditor())?'flex':'none';goHome();
 }
 async function checkSess(){const ss=getSess();if(!ss||!ss.token||!ss.user){clrSess();return;}loadCachedDB();CU=ss.user;showMain();syncFromServer().then(()=>{if(CU){const u2=getUsers().find(x=>x.id===CU.id);if(u2)CU=u2;goHome();}});}
 
-function getUserCats(){if(!CU)return[];if(CU.role==='admin')return Object.keys(DB);const perms=getPerms();return perms[CU.dept]||[];}
+function getUserCats(){if(!CU)return[];if(CU.role==='admin')return Object.keys(DB);const perms=getPerms(),own=(perms[CU.dept]||[]).slice();Object.keys(DB).forEach(k=>{if(canEditCat(k)&&!own.includes(k))own.push(k);});return own;}
 
 const TL={HW:'하드웨어',SW:'소프트웨어',NET:'네트워크'};
 const TC={HW:'thw',SW:'tsw',NET:'tnt'};
@@ -665,7 +680,14 @@ function sugKey(e){
 function clrSearch(){document.getElementById('sInput').value='';sugHide();goHome();}
 
 // ADMIN
-function showAdmin(){hideAll();document.getElementById('adminPanel').classList.add('active');document.getElementById('statsBar').style.display='none';document.getElementById('srchWrap').style.display='none';aTab('users',document.querySelectorAll('.atab')[0]);}
+function showAdmin(){
+  hideAll();document.getElementById('adminPanel').classList.add('active');document.getElementById('statsBar').style.display='none';document.getElementById('srchWrap').style.display='none';
+  const ed=isEditor(),tabs=[...document.querySelectorAll('.atab')];
+  tabs.forEach(b=>{const tab=(b.getAttribute('onclick').match(/aTab\('(\w+)'/)||[])[1];b.dataset.tab=tab;b.style.display=(!ed||['issues','stats','history'].includes(tab))?'':'none';});
+  document.getElementById('admT').textContent=ed?'⚙️ '+roleLabel(CU.role)+' 설정':'⚙️ 관리자 설정';
+  document.getElementById('admS').textContent=ed?'담당 파트의 가이드·통계·수정 이력 관리':'사용자·가이드 데이터·부서·권한 관리';
+  const first=ed?tabs.find(b=>b.dataset.tab==='issues'):tabs[0];aTab(first.dataset.tab,first);
+}
 function hideAdmin(){goHome();}
 function aTab(tab,el){document.querySelectorAll('.atab').forEach(t=>t.classList.remove('active'));el.classList.add('active');['aUsers','aAddUser','aIssues','aDepts','aPerms','aCatOrder','aStats','aHistory'].forEach(id=>document.getElementById(id).style.display='none');
   if(tab==='users'){document.getElementById('aUsers').style.display='block';renderUserList();}
@@ -716,10 +738,11 @@ function renderUserList(){
   const cols=['#4A6CF7','#10B981','#F97316','#EC4899','#8B5CF6','#06B6D4','#EF4444'];
   el.innerHTML=users.map((u,i)=>{
     const c=cols[i%cols.length],dept=depts.find(d=>d.id===u.dept),isMe=CU&&u.id===CU.id;
-    const rTag=u.role==='admin'?'<span class="ur ura">관리자</span>':'<span class="ur uru">일반</span>';
+    const rTag=`<span class="ur ${u.role==='admin'?'ura':/^editor:/.test(u.role)?'ure':'uru'}">${esc(roleLabel(u.role))}</span>`;
     const dTag=dept?`<span class="ud-tag">${esc(dept.name)}</span>`:'';
     const del=(isMe||u.role==='admin'&&users.filter(x=>x.role==='admin').length<=1)?'':`<button class="ub dl" onclick="askDelUser('${u.id}')">✕</button>`;
-    const role=isMe?'':(u.role==='admin'?`<button class="ub" title="일반으로" onclick="tglRole('${u.id}')">👤</button>`:`<button class="ub" title="관리자로" onclick="tglRole('${u.id}')">⭐</button>`);
+    const ro=ROLE_OPTS.some(o=>o[0]===u.role)?ROLE_OPTS:[...ROLE_OPTS,[u.role,roleLabel(u.role)]];
+    const role=isMe?'':`<select class="grp-sel" title="권한" onchange="setRole('${u.id}',this.value)">${ro.map(o=>`<option value="${esc(o[0])}" ${o[0]===u.role?'selected':''}>${esc(o[1])}</option>`).join('')}</select>`;
     const pwReset=isMe?'':`<button class="ub" title="비밀번호 초기화" onclick="resetPw('${u.id}')">🔑</button>`;
     return `<div class="uc an" style="animation-delay:${i*.02}s"><div class="ua" style="background:${c}18;color:${c}">${esc(u.name[0])}</div><div class="ui"><div class="un">${esc(u.name)} ${rTag} ${dTag} ${isMe?'<span style="font-size:9px;color:var(--tm)">(나)</span>':''}</div><div class="uid">${esc(u.id)} · ${esc(u.created)}</div></div><div class="uact">${pwReset}${role}${del}</div></div>`;
   }).join('');
@@ -739,7 +762,7 @@ function renderAddUser(){
     <div class="fr"><label>아이디</label><input type="text" class="field" id="aId" placeholder="영문/숫자"></div>
     <div class="fr"><label>초기 비밀번호</label><input type="text" class="field" id="aPw" placeholder="1234"></div>
     <div class="fr"><label>부서</label><select class="field" id="aDept">${depts.map(d=>`<option value="${esc(d.id)}">${esc(d.name)}</option>`).join('')}</select></div>
-    <div class="fr"><label>권한</label><select class="field" id="aRole"><option value="user">일반 직원</option><option value="admin">관리자</option></select></div>
+    <div class="fr"><label>권한</label><select class="field" id="aRole">${ROLE_OPTS.map(o=>`<option value="${o[0]}">${o[1]}</option>`).join('')}</select></div>
     <div class="fb"><button class="btn-sm btn-p" style="flex:1" onclick="addUser()">추가하기</button></div>
     <div class="err" id="addErr"></div></div>`;
 }
@@ -771,6 +794,12 @@ async function confirmDel(){
     renderIssueManager();
   }
 }
+function setRole(uid,role){
+  const users=getUsers(),u=users.find(x=>x.id===uid);if(!u)return;
+  if(u.role==='admin'&&role!=='admin'&&users.filter(x=>x.role==='admin').length<=1){toast('⚠️ 관리자 최소 1명 필요');renderUserList();return;}
+  u.role=role;saveUsers(users);renderUserList();
+  apiPost({action:'updateUsers',rows:users}).then(res=>toast(apiOk(res)?'✅ '+u.name+'님 → '+roleLabel(role):'⚠️ 권한 변경 — 서버 반영 실패, 다시 시도하세요'));
+}
 function tglRole(uid){const users=getUsers(),u=users.find(x=>x.id===uid);if(!u)return;if(u.role==='admin'&&users.filter(x=>x.role==='admin').length<=1){toast('⚠️ 관리자 최소 1명 필요');return;}u.role=u.role==='admin'?'user':'admin';saveUsers(users);renderUserList();apiPost({action:'updateUsers',rows:users}).then(res=>toast(apiOk(res)?'✅ 권한 변경 완료':'⚠️ 권한 변경 — 서버 반영 실패, 다시 시도하세요'));}
 
 // ─── Issue Manager ───
@@ -781,12 +810,12 @@ let imQuery='', imCat='', imOpen=new Set();
 
 function renderIssueManager(){
   const el=document.getElementById('aIssues');
-  const total=Object.keys(DB).reduce((n,k)=>n+DB[k].items.length,0);
+  const total=Object.keys(DB).filter(canEditCat).reduce((n,k)=>n+DB[k].items.length,0);
   let html='<div class="af"><h3>📋 가이드 데이터 관리</h3>';
   html+=`<div class="fb" style="margin-bottom:10px"><button class="btn-sm btn-p" style="flex:1" onclick="showIssueForm()">+ 새 가이드 추가</button><button class="btn-sm btn-o" style="flex:1;border:1px solid var(--bd)" onclick="syncAndRefresh()">🔄 서버 동기화</button></div>`;
   html+=`<input type="text" class="field" id="imSearch" placeholder="🔍 제목·소분류·태그로 검색" value="${esc(imQuery)}" oninput="imQuery=this.value;renderIssueList()">`;
   html+=`<div class="im-chips"><button class="im-chip ${imCat?'':'on'}" onclick="imPickCat('')">전체 ${total}</button>`;
-  GROUPS.forEach(g=>Object.keys(DB).filter(k=>DB[k].group===g.id).forEach(k=>{const c=DB[k];html+=`<button class="im-chip ${imCat===k?'on':''}" onclick="imPickCat('${esc(k)}')" title="${esc(g.name)}">${esc(c.name)} ${c.items.length}</button>`;}));
+  GROUPS.forEach(g=>Object.keys(DB).filter(k=>DB[k].group===g.id&&canEditCat(k)).forEach(k=>{const c=DB[k];html+=`<button class="im-chip ${imCat===k?'on':''}" onclick="imPickCat('${esc(k)}')" title="${esc(g.name)}">${esc(c.name)} ${c.items.length}</button>`;}));
   html+='</div><div id="imList"></div></div>';
   html+='<div id="issueFormWrap" style="display:none"></div>';
   el.innerHTML=html;
@@ -797,7 +826,7 @@ function renderIssueList(){
   const box=document.getElementById('imList');if(!box)return;
   const q=imQuery.trim().toLowerCase();
   const match=it=>!q||[it.title,it.subcat,it.subcat2,it.tags.join(' ')].join(' ').toLowerCase().includes(q);
-  const keys=Object.keys(DB).filter(k=>!imCat||k===imCat);
+  const keys=Object.keys(DB).filter(k=>canEditCat(k)&&(!imCat||k===imCat));
   let html='',shown=0,secs=0;
   keys.forEach(k=>{
     const c=DB[k],items=c.items.filter(match);
@@ -915,11 +944,11 @@ const viewed=new Set(),missed=new Set();let missTimer=null;
 function logEv(type,category,title,text){apiPost({action:'log',type,category:category||'',title:title||'',text:text||''});}
 function catName(k){return DB[k]?DB[k].name:k;}
 function logView(card){
-  if(!CU||CU.role==='admin')return;
+  if(!CU||CU.role==='admin'||isEditor())return;
   const key=card.dataset.k+'|'+card.dataset.t;if(viewed.has(key))return;viewed.add(key);
   logEv('view',catName(card.dataset.k),card.dataset.t);
 }
-function logMiss(q){if(!CU||CU.role==='admin'||q.length<2||missed.has(q))return;missed.add(q);logEv('miss','','',q);}
+function logMiss(q){if(!CU||CU.role==='admin'||isEditor()||q.length<2||missed.has(q))return;missed.add(q);logEv('miss','','',q);}
 function fbYes(btn){
   const c=btn.closest('.ic');logEv('yes',catName(c.dataset.k),c.dataset.t);
   btn.closest('.fbk').innerHTML='<div class="fbk-done">👍 해결돼서 다행이에요. 알려주셔서 감사해요!</div>';
@@ -948,6 +977,12 @@ async function renderStats(){
   const r=await apiPost({action:'getStats',days:statDays});
   if(!apiOk(r)){el.innerHTML='<div class="af"><div class="st-empty">⚠️ 통계를 불러오지 못했어요. 다시 시도해 주세요.</div></div>';return;}
   const sel=[7,30,90].map(d=>`<button class="im-chip ${d===statDays?'on':''}" onclick="statDays=${d};renderStats()">최근 ${d}일</button>`).join('');
+  if(isEditor()){
+    const names=new Set(Object.keys(DB).filter(canEditCat).map(k=>DB[k].name));
+    r.guides=r.guides.filter(g=>names.has(g.category));
+    r.feedback=r.feedback.filter(f=>f.type==='request'||names.has(f.category));
+    r.totals=Object.assign({},r.totals,{view:r.guides.reduce((n,g)=>n+g.view,0),yes:r.guides.reduce((n,g)=>n+g.yes,0),no:r.guides.reduce((n,g)=>n+g.no,0)});
+  }
   MISSES=r.misses;const T=r.totals,rate=(T.yes+T.no)?Math.round(T.yes/(T.yes+T.no)*100)+'%':'-';
   const none='<div class="st-empty">아직 기록이 없어요</div>';
   let h=`<div class="af"><h3>📊 이용 통계</h3><div class="st-sel">${sel}</div>
@@ -964,7 +999,7 @@ function missLinkOpen(btn,i){
   if(box.style.display!=='none'){box.style.display='none';return;}
   const q=MISSES[i].q;
   // 비슷해 보이는 가이드를 위로
-  const opts=Object.keys(DB).flatMap(k=>DB[k].items.map(it=>({k,it,s:srScore(it,q.split(/\s+/)[0])})))
+  const opts=Object.keys(DB).filter(canEditCat).flatMap(k=>DB[k].items.map(it=>({k,it,s:srScore(it,q.split(/\s+/)[0])})))
     .sort((a,b)=>b.s-a.s||a.it.title.localeCompare(b.it.title));
   box.innerHTML=`<div style="display:flex;gap:6px;margin-top:8px"><select class="field" style="margin:0;flex:1;font-size:12px;padding:8px 10px">${opts.map(o=>`<option value="${esc(o.k)}|${esc(o.it.title)}">[${esc(DB[o.k].name)}] ${esc(o.it.title)}</option>`).join('')}</select><button class="btn-sm btn-p" onclick="missLink(this,${i})">추가</button></div>`;
   box.style.display='block';
@@ -990,7 +1025,7 @@ async function renderHistory(){
   el.innerHTML='<div class="af"><div class="st-empty">📡 수정 이력을 불러오는 중...</div></div>';
   const r=await apiPost({action:'getHistory'});
   if(!apiOk(r)){el.innerHTML='<div class="af"><div class="st-empty">⚠️ 수정 이력을 불러오지 못했어요. 다시 시도해 주세요.</div></div>';return;}
-  HIST=r.items||[];
+  HIST=(r.items||[]).filter(x=>myGroups().includes(grpOf(String((x.row||{}).cat_group||'')).id));
   el.innerHTML='<div class="af"><h3>🕘 가이드 수정 이력</h3><div class="st-empty" style="padding-top:0">가이드를 수정하거나 삭제하기 <b>전</b> 내용이 저장돼요. 되돌리면 그 시점 내용으로 바뀌어요.</div>'+
     (HIST.length?HIST.map((x,i)=>`<div class="st-row"><div class="st-t">${x.change==='삭제'?'🗑':'✏️'} ${esc(x.title)}<small>${esc(x.change)} · ${esc(x.user)} · ${fmtTime(x.time)}</small></div><button class="btn-sm btn-o" style="padding:6px 10px" onclick="restoreHist(${i})">되돌리기</button></div>`).join(''):'<div class="st-empty">아직 수정 이력이 없어요</div>')+'</div>';
 }
@@ -1080,7 +1115,7 @@ function imAll(on){imOpen=on?new Set(Object.keys(DB)):new Set();renderIssueList(
 
 function showIssueForm(editData){
   issueEditMode=!!editData;issueEditTitle=editData?editData.title:'';issueEditId=editData?(editData.id||''):'';
-  const cats=Object.keys(DB);
+  const cats=Object.keys(DB).filter(canEditCat);
   const catOpts=GROUPS.map(g=>{const ks=cats.filter(k=>DB[k].group===g.id);return ks.length?`<optgroup label="${g.icon} ${esc(g.name)}">${ks.map(k=>`<option value="${esc(k)}" ${editData&&editData.category===k?'selected':''}>${esc(DB[k].name)}</option>`).join('')}</optgroup>`:'';}).join('');
   const newCatOpt='<option value="__new__">➕ 새 카테고리</option>';
   const allSubs=[...new Set(cats.flatMap(k=>DB[k].items.map(it=>it.subcat).filter(Boolean)))];
@@ -1093,7 +1128,7 @@ function showIssueForm(editData){
   w.innerHTML=`<div class="af"><h3>${editData?'✏️ 가이드 수정':'➕ 새 가이드 추가'}</h3>
     <div class="fr"><label>카테고리</label><select class="field" id="issCat" onchange="onCatChange()">${catOpts}${newCatOpt}</select></div>
     <div id="newCatFields" style="display:none">
-      <div class="fr"><label>큰 분류</label><select class="field" id="newCatGroup">${GROUPS.map(g=>`<option value="${g.id}" ${g.id===(homeGroup!=='all'?homeGroup:DEF_GROUP)?'selected':''}>${g.icon} ${esc(g.name)}</option>`).join('')}</select></div>
+      <div class="fr"><label>큰 분류</label><select class="field" id="newCatGroup">${GROUPS.filter(g=>myGroups().includes(g.id)).map(g=>`<option value="${g.id}" ${g.id===(homeGroup!=='all'?homeGroup:DEF_GROUP)?'selected':''}>${g.icon} ${esc(g.name)}</option>`).join('')}</select></div>
       <div class="fr"><label>카테고리 이름</label><input type="text" class="field" id="newCatName" placeholder="예: 법인카드, 연차·휴가, 이메일"></div>
       <input type="hidden" id="newCatIcon" value="">
       <div class="fr"><label>색상 선택</label>
