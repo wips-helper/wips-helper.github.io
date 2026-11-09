@@ -120,6 +120,17 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 .se{text-align:center;padding:50px 20px;color:var(--tm);font-size:13px;line-height:1.7}
 .se small{font-size:11px}
 .loc{display:block;font-size:10px;font-weight:500;color:var(--tm);margin-bottom:2px}
+.lv{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:8px;font-size:10px;font-weight:600;vertical-align:2px;white-space:nowrap}
+.lv-self{background:#ECFDF5;color:#059669}.lv-ask{background:#FEF3C7;color:#B45309}
+.lv-note{background:#FEF3C7;color:#92400E;border-radius:8px;padding:8px 10px;font-size:11.5px;line-height:1.5;margin-bottom:10px}
+.share-b{margin-top:10px;width:100%;padding:8px;border:1px dashed var(--bd);border-radius:8px;background:none;color:var(--ts);font-size:12px;font-family:inherit;cursor:pointer}
+.share-b:hover{border-color:var(--ac);color:var(--ac)}
+.pop{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.pop-i{display:flex;align-items:center;gap:10px;text-align:left;padding:10px 12px;border:1px solid var(--bd);border-radius:var(--r);background:var(--bgc);cursor:pointer;font-family:inherit;color:var(--tp)}
+.pop-i:hover{border-color:var(--ac)}
+.pop-n{flex-shrink:0;width:22px;height:22px;border-radius:50%;background:var(--al);color:var(--ac);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
+.pop-t{flex:1;min-width:0;font-size:13px;font-weight:500}
+.pop-t small{display:block;font-size:10.5px;color:var(--tm);font-weight:400}
 .fbk{margin-top:14px;padding-top:12px;border-top:1px dashed var(--bd);font-size:12px;color:var(--ts)}
 .fbk-q{display:block;margin-bottom:8px}
 .fbk-row{display:flex;gap:6px;flex-wrap:wrap}
@@ -298,6 +309,7 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 <div class="content">
   <div class="sync-bar" id="syncBar">📡 서버에서 데이터 동기화 중...</div>
   <div id="homeView">
+    <div id="popBox"></div>
     <div class="grp-tabs" id="grpTabs"></div>
     <div id="catGrid"></div>
   </div>
@@ -369,9 +381,9 @@ function getDepts(){return g('depts',DEF_DEPTS);}
 function saveDepts(d){s('depts',d);}
 function getPerms(){return g('perms',DEF_PERMS);}
 function savePerms(p){s('perms',p);}
-function getSess(){try{return JSON.parse(sessionStorage.getItem('pcg_sess'));}catch(e){return null;}}
-function setSess(v){sessionStorage.setItem('pcg_sess',JSON.stringify(v));}
-function clrSess(){sessionStorage.removeItem('pcg_sess');}
+function getSess(){try{return JSON.parse(localStorage.getItem('pcg_sess')||sessionStorage.getItem('pcg_sess'));}catch(e){return null;}}
+function setSess(v){try{localStorage.setItem('pcg_sess',JSON.stringify(v));sessionStorage.removeItem('pcg_sess');}catch(e){sessionStorage.setItem('pcg_sess',JSON.stringify(v));}}
+function clrSess(){try{localStorage.removeItem('pcg_sess');}catch(e){}sessionStorage.removeItem('pcg_sess');}
 
 // 큰 분류 (재무 / 인사 / 지원). 카테고리마다 ISSUES 시트의 cat_group 칸에 id를 저장한다.
 const GROUPS=[{id:'trouble',name:'PC 장애 조치'},{id:'setup',name:'PC 세팅·사용 안내'}];
@@ -434,6 +446,7 @@ async function syncFromServer(){
   if(!data||data.error){if(bar)bar.classList.remove('show');return false;}
   if(data.users&&data.users.length){saveUsers(data.users.map(u=>({id:String(u.id||''),name:String(u.name||''),role:String(u.role||'user'),dept:String(u.dept||'general'),created:String(u.created||'').slice(0,10)})));}
   if(data.depts&&data.depts.length){saveDepts(data.depts.map(d=>({id:String(d.id||''),name:String(d.name||''),color:String(d.color||'#9090A0')})));}
+  if(Array.isArray(data.popular)){POPULAR=data.popular;s('popular',POPULAR);}
   if(data.perms&&data.perms.length){const perms={};data.perms.forEach(p=>{perms[String(p.dept_id||'')]=String(p.categories||'').split(',').map(x=>x.trim()).filter(Boolean);});savePerms(perms);}
   if(!Array.isArray(data.issues)){if(bar)bar.classList.remove('show');return false;}
   const prev=RAW_ISSUES;
@@ -462,7 +475,7 @@ function buildDB(issues){
     const steps=[],imgs=[];
     for(let i=1;i<=4;i++){const st=String(row['step'+i]||'');if(st){steps.push(st);imgs.push(driveImgUrl(row['img'+i]||''));}}
     const tags=String(row.tags||'').split(',').map(x=>x.trim()).filter(Boolean);
-    DB[cat].items.push({id:String(row.id),cat,subcat:String(row.subcat||''),subcat2:String(row.subcat2||''),subcat_icon:String(row.subcat_icon||''),title:String(row.title||''),severity:String(row.severity||'mid'),tags,steps,imgs,tip:String(row.tip||''),doc_url:String(row.doc_url||'')});
+    DB[cat].items.push({id:String(row.id),cat,subcat:String(row.subcat||''),subcat2:String(row.subcat2||''),subcat_icon:String(row.subcat_icon||''),title:String(row.title||''),severity:String(row.severity||'mid'),tags,steps,imgs,tip:String(row.tip||''),doc_url:String(row.doc_url||''),level:String(row.level||'')});
   });
   // cat_order 기준으로 카테고리 정렬(값 없는 건 뒤로, 원래 순서 유지)
   const keys=Object.keys(DB);
@@ -484,7 +497,7 @@ async function doLogin(){
   er.classList.remove('show');document.getElementById('loginPw').value='';
   CU=res.user;setSess({token:res.token,user:res.user});
   loadCachedDB();showMain();
-  syncFromServer().then(()=>{if(CU){const u2=getUsers().find(x=>x.id===CU.id);if(u2)CU=u2;goHome();}});
+  syncFromServer().then(()=>{if(CU){const u2=getUsers().find(x=>x.id===CU.id);if(u2)CU=u2;goHome();openPendingGuide();}});
 }
 function doLogout(){const ss=getSess();if(ss&&ss.token)apiPost({action:'logout'});clrSess();CU=null;document.getElementById('mainScreen').classList.remove('active');document.getElementById('loginScreen').classList.add('active');document.getElementById('loginId').value='';document.getElementById('loginPw').value='';}
 function showMain(){
@@ -493,7 +506,7 @@ function showMain(){
   const dept=getDepts().find(d=>d.id===CU.dept);document.getElementById('deptPill').textContent=dept?dept.name:'';
   document.getElementById('adminBtn').style.display=(CU.role==='admin'||isEditor())?'flex':'none';goHome();
 }
-async function checkSess(){const ss=getSess();if(!ss||!ss.token||!ss.user){clrSess();return;}loadCachedDB();CU=ss.user;showMain();syncFromServer().then(()=>{if(CU){const u2=getUsers().find(x=>x.id===CU.id);if(u2)CU=u2;goHome();}});}
+async function checkSess(){const ss=getSess();if(!ss||!ss.token||!ss.user){clrSess();return;}loadCachedDB();CU=ss.user;showMain();openPendingGuide();syncFromServer().then(()=>{if(CU){const u2=getUsers().find(x=>x.id===CU.id);if(u2)CU=u2;if(pendingGuide)openPendingGuide();else if(document.getElementById('homeView').style.display==='block')goHome();}});}
 
 function getUserCats(){if(!CU)return[];if(CU.role==='admin')return Object.keys(DB);const perms=getPerms(),own=(perms[CU.dept]||[]).slice();Object.keys(DB).forEach(k=>{if(canEditCat(k)&&!own.includes(k))own.push(k);});return own;}
 
@@ -501,6 +514,15 @@ const TL={HW:'하드웨어',SW:'소프트웨어',NET:'네트워크'};
 const TC={HW:'thw',SW:'tsw',NET:'tnt'};
 
 let homeGroup=(()=>{try{return localStorage.getItem('pcg_home_group')||'all';}catch(e){return 'all';}})();
+let POPULAR=g('popular',[]);
+function renderPopular(){
+  const box=document.getElementById('popBox');if(!box)return;
+  const allowed=getUserCats(),list=[];
+  POPULAR.forEach(p=>{if(list.length>=5)return;
+    const k=Object.keys(DB).find(k=>DB[k].name===p.category&&allowed.includes(k));
+    const it=k&&DB[k].items.find(i=>i.title===p.title);if(it&&!list.includes(it))list.push(it);});
+  box.innerHTML=list.length?`<div class="sec-t">많이 찾는 문제</div><div class="pop">${list.map((it,i)=>`<button class="pop-i" onclick="openGuide(findGuide('${guideCode(it.cat,it.title)}'))"><span class="pop-n">${i+1}</span><span class="pop-t">${esc(it.title)}<small>${esc(DB[it.cat].name)}</small></span></button>`).join('')}</div>`:'';
+}
 function setHomeGroup(g){homeGroup=g;try{localStorage.setItem('pcg_home_group',g);}catch(e){}initCats();}
 function initCats(){
   const grid=document.getElementById('catGrid'),allowed=getUserCats();let total=0,access=0;
@@ -518,6 +540,7 @@ function initCats(){
     return `<div class="sec-t">${esc(g.name)}</div>${body}`;
   }).join('');
   document.getElementById('totalCnt').textContent=total;document.getElementById('accessCnt').textContent=access;
+  renderPopular();
 }
 
 function showImg(url){document.getElementById('imgModalSrc').src=url;document.getElementById('imgModal').classList.add('show');}
@@ -534,8 +557,11 @@ function renderCards(items,el,ck){
     const doc=it.doc_url?`<a href="${esc(it.doc_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:9px 14px;border:1.5px solid var(--ac);color:var(--ac);border-radius:8px;text-decoration:none;font-size:13px;font-weight:600">📄 자세한 내용 PDF로 보기</a>`:'';
     const uid='i-'+(ck||'s')+'-'+i;
     const where=(!ck&&DB[it.cat])?`<span class="loc">${esc(DB[it.cat].name)}${it.subcat?' › '+esc(it.subcat):''}</span>`:'';
+    const lv=it.level==='self'?'<span class="lv lv-self">직접 해결 가능</span>':it.level==='ask'?'<span class="lv lv-ask">담당자 요청 권장</span>':'';
+    const lvNote=it.level==='ask'?'<div class="lv-note">잘못 따라 하면 문제가 커질 수 있어요. 어렵다면 무리하지 말고 재무/지원팀에 요청해 주세요.</div>':'';
+    const share=`<button class="share-b" onclick="event.stopPropagation();copyGuideLink(this)">링크 복사</button>`;
     const fbk=`<div class="fbk" onclick="event.stopPropagation()"><span class="fbk-q">이 가이드로 해결됐나요?</span><div class="fbk-row"><button class="fbk-b" onclick="fbYes(this)">👍 해결됐어요</button><button class="fbk-b" onclick="fbNo(this)">👎 아직이요</button></div></div>`;
-    el.innerHTML+=`<div class="ic an" style="animation-delay:${i*.03}s" id="${uid}" data-k="${esc(it.cat||'')}" data-t="${esc(it.title)}"><div class="ih" onclick="tgl('${uid}')"><span class="nm">${where}${esc(it.title)}</span><span class="ar">▼</span></div><div class="ib"><ul class="sli">${steps}</ul>${tip}${doc}${fbk}</div></div>`;
+    el.innerHTML+=`<div class="ic an" style="animation-delay:${i*.03}s" id="${uid}" data-k="${esc(it.cat||'')}" data-t="${esc(it.title)}"><div class="ih" onclick="tgl('${uid}')"><span class="nm">${where}${esc(it.title)}${lv}</span><span class="ar">▼</span></div><div class="ib">${lvNote}<ul class="sli">${steps}</ul>${tip}${doc}${fbk}${share}</div></div>`;
   });
 }
 
@@ -953,6 +979,31 @@ document.addEventListener('paste',e=>{
 // 관리자가 화면을 확인하며 연 가이드나 검색은 통계가 왜곡되지 않도록 기록하지 않는다.
 const viewed=new Set(),missed=new Set();let missTimer=null;
 function logEv(type,category,title,text){apiPost({action:'log',type,category:category||'',title:title||'',text:text||''});}
+function guideCode(cat,title){let h=5381;for(const ch of String(cat)+'|'+String(title))h=((h<<5)+h+ch.codePointAt(0))>>>0;return h.toString(36);}
+function guideLink(card){return location.origin+location.pathname+'#g='+guideCode(card.dataset.k,card.dataset.t);}
+async function copyGuideLink(btn){
+  const url=guideLink(btn.closest('.ic'));
+  try{await navigator.clipboard.writeText(url);toast('🔗 링크를 복사했어요. 메신저에 붙여넣으세요');}
+  catch(e){prompt('아래 링크를 복사하세요',url);}
+}
+// 링크로 들어오면 (로그인 후) 그 가이드를 바로 펼친다
+let pendingGuide=(location.hash.match(/^#g=([0-9a-z]+)$/)||[])[1]||'';
+window.addEventListener('hashchange',()=>{pendingGuide=(location.hash.match(/^#g=([0-9a-z]+)$/)||[])[1]||'';openPendingGuide();});
+function findGuide(code){for(const k of Object.keys(DB))for(const it of DB[k].items)if(guideCode(k,it.title)===code)return it;return null;}
+function openGuide(it){
+  if(!it)return false;
+  showItems(it.cat,null,null);
+  const card=[...document.querySelectorAll('#dCards .ic')].find(c=>c.dataset.k===it.cat&&c.dataset.t===it.title);
+  if(card){if(!card.classList.contains('open'))tgl(card.id);setTimeout(()=>card.scrollIntoView({block:'start',behavior:'smooth'}),50);}
+  return true;
+}
+function openPendingGuide(){
+  if(!pendingGuide||!CU||!Object.keys(DB).length)return;
+  const it=findGuide(pendingGuide);
+  if(!it){toast('⚠️ 링크의 가이드를 찾을 수 없어요. 지워졌거나 제목이 바뀌었을 수 있어요');}
+  else openGuide(it);
+  pendingGuide='';history.replaceState(null,'',location.pathname+location.search);
+}
 function catName(k){return DB[k]?DB[k].name:k;}
 function logView(card){
   if(!CU||CU.role==='admin'||isEditor())return;
@@ -1163,6 +1214,7 @@ function showIssueForm(editData){
     ${dzSlot('issI3','image','이미지 3 (선택)',editData?editData.img3:'')}
     <div class="fr"><label>조치 4</label><textarea class="field field-ta" id="issS4" rows="1" onkeydown="if(event.key==='Enter')event.preventDefault()" oninput="taFit(this)">${editData?esc(editData.step4):''}</textarea></div>
     ${dzSlot('issI4','image','이미지 4 (선택)',editData?editData.img4:'')}
+    <div class="fr"><label>누가 해결하나요?</label><select class="field" id="issLevel">${[['','선택 안 함'],['self','직원이 직접 해결 가능'],['ask','담당자 요청 권장 (잘못하면 문제가 커질 수 있음)']].map(o=>`<option value="${o[0]}" ${editData&&editData.level===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div>
     <div class="fr"><label>팁 (선택)</label><textarea class="field field-ta" id="issTip" rows="1" placeholder="유용한 팁" onkeydown="if(event.key==='Enter')event.preventDefault()" oninput="taFit(this)">${editData?esc(editData.tip):''}</textarea></div>
     ${dzSlot('issDoc','doc','첨부 PDF (선택)',editData?editData.doc_url:'')}
     <div class="fb"><button class="btn-sm btn-p" style="flex:1" onclick="saveIssue()">${editData?'수정 저장':'추가하기'}</button><button class="btn-sm btn-o" style="flex:1;border:1px solid var(--bd)" onclick="imCloseForm()">취소</button></div>
@@ -1190,7 +1242,7 @@ function editIssue(id){
     id:String(row.id||''),
     category:String(row.category||''),subcat:String(row.subcat||''),subcat2:String(row.subcat2||''),subcat_icon:String(row.subcat_icon||''),title:String(row.title||''),severity:String(row.severity||'mid'),
     tags:String(row.tags||''),step1:String(row.step1||''),img1:String(row.img1||''),step2:String(row.step2||''),img2:String(row.img2||''),
-    step3:String(row.step3||''),img3:String(row.img3||''),step4:String(row.step4||''),img4:String(row.img4||''),tip:String(row.tip||''),doc_url:String(row.doc_url||'')
+    step3:String(row.step3||''),img3:String(row.img3||''),step4:String(row.step4||''),img4:String(row.img4||''),tip:String(row.tip||''),doc_url:String(row.doc_url||''),level:String(row.level||'')
   });
 }
 
@@ -1235,7 +1287,8 @@ async function saveIssue(){
     step3:document.getElementById('issS3').value.trim(),img3:document.getElementById('issI3').value.trim(),
     step4:document.getElementById('issS4').value.trim(),img4:document.getElementById('issI4').value.trim(),
     tip:document.getElementById('issTip').value.trim(),
-    doc_url:document.getElementById('issDoc').value.trim()
+    doc_url:document.getElementById('issDoc').value.trim(),
+    level:document.getElementById('issLevel').value
   };
 
   // 저장 직전 서버 최신본을 먼저 받아, 다른 관리자가 추가한 가이드를 덮어쓰지 않도록 한다.
@@ -1335,6 +1388,7 @@ async function changePw(){
   if(nw.length<4){er.textContent='4자 이상 입력하세요.';er.classList.add('show');return;}
   er.classList.remove('show');
   const res=await apiPost({action:'changePw',cur,nw});
+  if(apiOk(res)&&res.token){const ss=getSess();if(ss)setSess(Object.assign(ss,{token:res.token}));}
   if(!apiOk(res)){er.textContent=res&&res.error?res.error:'서버에 연결할 수 없습니다. 다시 시도하세요.';er.classList.add('show');return;}
   document.getElementById('curPw').value='';document.getElementById('newPw').value='';document.getElementById('newPw2').value='';
   toast('✅ 비밀번호 변경 완료');goHome();
