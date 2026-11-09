@@ -1,7 +1,7 @@
 {
   "name": "WIPS 업무 도우미",
   "short_name": "업무 도우미",
-  "description": "WIPS 재무·인사·지원 문의 가이드",
+  "description": "WIPS PC 장애 조치·세팅 안내",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#1A1A2E",
