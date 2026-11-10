@@ -208,6 +208,10 @@ html,body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:var(--b
 .im-head{display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;user-select:none}
 .im-head:hover{background:var(--al)}
 .im-head .im-name{flex:1;font-size:13px;font-weight:600}
+.im-add{flex-shrink:0;width:28px;height:28px;border-radius:8px;border:1px solid var(--bd);background:var(--bgc);color:var(--ac);font-size:17px;line-height:1;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;font-family:inherit}
+.im-add:hover{background:var(--al);border-color:var(--ac)}
+.im-sub{display:flex;align-items:center;gap:4px}
+.im-add-s{width:22px;height:22px;font-size:14px;margin-left:auto}
 .im-head .im-cnt{font-size:11px;color:var(--tm);background:var(--bg);padding:2px 8px;border-radius:8px}
 .im-head .im-ar{font-size:11px;color:var(--tm);transition:transform .2s}
 .im-sec.open .im-ar{transform:rotate(90deg)}
@@ -874,9 +878,9 @@ function renderIssueList(){
     // 소분류별로 묶기
     const groups={},order=[];
     items.forEach(it=>{const s=it.subcat||'';if(!(s in groups)){groups[s]=[];order.push(s);}groups[s].push(it);});
-    html+=`<div class="im-sec ${open?'open':''}"><div class="im-head" onclick="imToggle('${esc(k)}')"><span class="im-ar">▶</span><span class="im-name">${esc(c.name)}</span><span class="im-cnt">${items.length}건</span></div><div class="im-body">`;
+    html+=`<div class="im-sec ${open?'open':''}"><div class="im-head" onclick="imToggle('${esc(k)}')"><span class="im-ar">▶</span><span class="im-name">${esc(c.name)}</span><span class="im-cnt">${items.length}건</span><button class="im-add" title="이 카테고리에 새 가이드 추가" onclick="event.stopPropagation();imAdd('${esc(k)}','')">+</button></div><div class="im-body">`;
     order.forEach(s=>{
-      if(order.length>1||s)html+=`<div class="im-sub">📂 ${esc(s||'기타')} <span>${groups[s].length}</span></div>`;
+      if(order.length>1||s)html+=`<div class="im-sub">📂 ${esc(s||'기타')} <span>${groups[s].length}</span>${s?`<button class="im-add im-add-s" title="이 소분류에 새 가이드 추가" onclick="imAdd('${esc(k)}','${esc(s)}')">+</button>`:''}</div>`;
       groups[s].forEach(it=>{
         html+=`<div class="issue-card"><div class="ic-color" style="background:${c.color}"></div><div class="ic-info"><div class="ic-title">${esc(it.title)}</div><div class="ic-meta">${it.subcat2?'› '+esc(it.subcat2)+' · ':''}${it.steps.length}단계</div></div><div class="uact"><button class="ub" onclick="editIssue('${it.id}')">✏️</button><button class="ub dl" onclick="askDelIssue('${it.id}')">✕</button></div></div>`;
       });
@@ -1173,12 +1177,15 @@ function openEditor(file){
   });
 }
 
+function imAdd(cat,sub){showIssueForm(null,{category:cat,subcat:sub});}
 function imAll(on){imOpen=on?new Set(Object.keys(DB)):new Set();renderIssueList();}
 
-function showIssueForm(editData){
+// preset = 새 가이드를 특정 카테고리(·소분류)에 바로 만들 때 미리 채울 값 {category, subcat}
+function showIssueForm(editData,preset){
+  const pre=editData||preset||null;
   issueEditMode=!!editData;issueEditTitle=editData?editData.title:'';issueEditId=editData?(editData.id||''):'';
   const cats=Object.keys(DB).filter(canEditCat);
-  const catOpts=GROUPS.map(g=>{const ks=cats.filter(k=>DB[k].group===g.id);return ks.length?`<optgroup label="${esc(g.name)}">${ks.map(k=>`<option value="${esc(k)}" ${editData&&editData.category===k?'selected':''}>${esc(DB[k].name)}</option>`).join('')}</optgroup>`:'';}).join('');
+  const catOpts=GROUPS.map(g=>{const ks=cats.filter(k=>DB[k].group===g.id);return ks.length?`<optgroup label="${esc(g.name)}">${ks.map(k=>`<option value="${esc(k)}" ${pre&&pre.category===k?'selected':''}>${esc(DB[k].name)}</option>`).join('')}</optgroup>`:'';}).join('');
   const newCatOpt='<option value="__new__">➕ 새 카테고리</option>';
   const allSubs=[...new Set(cats.flatMap(k=>DB[k].items.map(it=>it.subcat).filter(Boolean)))];
   const subListOpts=allSubs.map(s=>`<option value="${esc(s)}"></option>`).join('');
@@ -1198,7 +1205,7 @@ function showIssueForm(editData){
         <input type="hidden" id="newCatColor" value="#4A6CF7">
       </div>
     </div>
-    <div class="fr"><label>소분류 <span style="font-size:10px;color:var(--tm)">(선택 · 비워두면 분류 없음)</span></label><input type="text" class="field" id="issSub" list="subList" placeholder="예: 잉크/토너, 용지걸림" value="${editData?esc(editData.subcat||''):''}"><datalist id="subList">${subListOpts}</datalist></div>
+    <div class="fr"><label>소분류 <span style="font-size:10px;color:var(--tm)">(선택 · 비워두면 분류 없음)</span></label><input type="text" class="field" id="issSub" list="subList" placeholder="예: 잉크/토너, 용지걸림" value="${pre?esc(pre.subcat||''):''}"><datalist id="subList">${subListOpts}</datalist></div>
     <input type="hidden" id="issSubIcon" value="${editData?esc(editData.subcat_icon||''):''}">
     </div>
     <div class="fr"><label>소소분류 <span style="font-size:10px;color:var(--tm)">(선택 · 소분류 안의 더 작은 분류)</span></label><input type="text" class="field" id="issSub2" list="sub2List" placeholder="예: 흑백, 컬러" value="${editData?esc(editData.subcat2||''):''}"><datalist id="sub2List">${sub2ListOpts}</datalist></div>
